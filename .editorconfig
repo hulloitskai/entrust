@@ -1,0 +1,2 @@
+[*.{rs,sql}]
+indent_size = 4

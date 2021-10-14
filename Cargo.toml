@@ -1,0 +1,38 @@
+[package]
+name = "entrust"
+version = "0.1.0"
+edition = "2018"
+
+
+[dependencies]
+anyhow = "^1.0.44"
+async_trait = { package = "async-trait", version = "^0.1.51" }
+base64 = "^0.13.0"
+bson = { version = "^2.0.0", features = ["chrono-0_4"] }
+derives = { package = "derive_more", version = "^0.99.16" }
+macros = { package = "entrust-macros", path = "./macros" }
+mongodb = "^2.0.1"
+pin_project = { package = "pin-project", version = "^1.0.8" }
+serde = { version = "^1.0.130", features = ["derive"] }
+tokio = { version = "^1.12.0" }
+tracing = "^0.1.28"
+typed_builder = { package = "typed-builder", version = "^0.9.1" }
+
+[dependencies.chrono]
+version = "^0.4.19"
+default-features = false
+features = ["std", "serde"]
+
+[dependencies.futures]
+package = "futures-core"
+version = "^0.3.17"
+default-features = false
+
+[dependencies.futures_util]
+package = "futures-util"
+version = "^0.3.17"
+default-features = false
+
+
+[profile.dev]
+split-debuginfo = "unpacked"
