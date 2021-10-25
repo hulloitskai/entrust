@@ -36,16 +36,16 @@ impl<T: Entity> Record<T> {
 }
 
 impl<T: Entity> Record<T> {
-    pub fn id(&self) -> &T::Id {
-        &self.meta.id
+    pub fn id(&self) -> T::Id {
+        self.meta.id
     }
 
-    pub fn created_at(&self) -> &DateTime {
-        &self.meta.created_at
+    pub fn created_at(&self) -> DateTime {
+        self.meta.created_at
     }
 
-    pub fn updated_at(&self) -> &DateTime {
-        &self.meta.updated_at
+    pub fn updated_at(&self) -> DateTime {
+        self.meta.updated_at
     }
 }
 

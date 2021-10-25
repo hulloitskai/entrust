@@ -309,7 +309,7 @@ fn filter_value_has_operator(value: &Bson, operator: &str) -> bool {
     }
 }
 
-fn filter_array_has_operator(array: &Vec<Bson>, operator: &str) -> bool {
+fn filter_array_has_operator(array: &[Bson], operator: &str) -> bool {
     for entry in array {
         if filter_value_has_operator(entry, operator) {
             return true;

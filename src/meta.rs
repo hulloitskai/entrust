@@ -11,12 +11,11 @@ impl<T: Entity> EntityMeta<T> {
     pub fn new() -> Self {
         let id: T::Id = ObjectId::new().into();
         let created_at = now();
-        let updated_at = created_at.clone();
 
         Self {
             id,
             created_at,
-            updated_at,
+            updated_at: created_at,
         }
     }
 }
@@ -36,9 +35,9 @@ impl<T: Entity> Clone for EntityMeta<T> {
         } = self;
 
         Self {
-            id: id.clone(),
-            created_at: created_at.clone(),
-            updated_at: updated_at.clone(),
+            id: *id,
+            created_at: *created_at,
+            updated_at: *updated_at,
         }
     }
 }

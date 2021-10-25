@@ -27,8 +27,8 @@ impl FromStr for GlobalId {
             String::from_utf8_lossy(&data[..]).into_owned()
         };
         let segments = raw.split(':').collect::<Vec<_>>();
-        match &segments[..] {
-            &[namespace, id] => {
+        match segments[..] {
+            [namespace, id] => {
                 let id: ObjectId =
                     id.parse().context("failed to parse ObjectId")?;
                 let id = GlobalId {
@@ -47,7 +47,7 @@ impl FromStr for GlobalId {
 pub trait EntityId
 where
     Self: Debug,
-    Self: Clone,
+    Self: Clone + Copy,
     Self: Into<ObjectId> + From<ObjectId>,
 {
     type Entity: Entity;
