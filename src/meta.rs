@@ -2,18 +2,16 @@ use super::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EntityMeta<T: Entity> {
-    pub id: T::Id,
+    pub id: EntityId<T>,
     pub created_at: DateTime,
     pub updated_at: DateTime,
 }
 
 impl<T: Entity> EntityMeta<T> {
     pub fn new() -> Self {
-        let id: T::Id = ObjectId::new().into();
         let created_at = now();
-
         Self {
-            id,
+            id: default(),
             created_at,
             updated_at: created_at,
         }
@@ -49,10 +47,9 @@ impl<T: Entity> Object for EntityMeta<T> {
             created_at,
             updated_at,
         } = self.to_owned();
-        let id: ObjectId = id.into();
 
         let doc = doc! {
-            "_id": id,
+            "_id": id.to_object_id(),
             "_created_at": BsonDateTime::from(created_at),
             "_updated_at": BsonDateTime::from(updated_at),
         };

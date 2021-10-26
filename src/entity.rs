@@ -12,13 +12,12 @@ use mongodb::SessionCursor;
 pub trait Entity
 where
     Self: Object,
+    Self: Clone,
     Self: Send + Sync,
 {
     const NAME: &'static str;
 
     type Services: EntityServices;
-    type Id: EntityId;
-
     type Conditions: EntityConditions;
     type Sorting: EntitySorting;
 
@@ -27,14 +26,18 @@ where
         ctx.database().collection(name)
     }
 
-    fn get(id: Self::Id) -> FindOneQuery<Self> {
-        let id: ObjectId = id.into();
-        let filter = doc! { "_id": id };
+    fn get(id: EntityId<Self>) -> FindOneQuery<Self> {
+        let filter = doc! { "_id": id.to_object_id() };
         FindOneQuery::from_filter(filter)
     }
 
-    fn get_many(ids: impl IntoIterator<Item = ObjectId>) -> FindQuery<Self> {
-        let ids = Bson::from_iter(ids);
+    fn get_many(
+        ids: impl IntoIterator<Item = EntityId<Self>>,
+    ) -> FindQuery<Self> {
+        let ids = {
+            let ids = ids.into_iter().map(ObjectId::from);
+            Bson::from_iter(ids)
+        };
         let filter = doc! { "_id": { "$in": ids } };
         FindQuery::from_filter(filter)
     }

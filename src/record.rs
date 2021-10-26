@@ -4,10 +4,6 @@ use mongodb::options::ReplaceOptions;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record<T: Entity> {
-    #[serde(bound(
-        serialize = "T::Id: Serialize",
-        deserialize = "T::Id: Deserialize<'de>"
-    ))]
     pub meta: EntityMeta<T>,
     pub data: T,
 }
@@ -36,8 +32,8 @@ impl<T: Entity> Record<T> {
 }
 
 impl<T: Entity> Record<T> {
-    pub fn id(&self) -> T::Id {
-        self.meta.id
+    pub fn id(&self) -> EntityId<T> {
+        self.meta.id.into()
     }
 
     pub fn created_at(&self) -> DateTime {
@@ -61,10 +57,7 @@ impl<T: Entity> Record<T> {
 
             let replacement =
                 self.to_document().context("failed to serialize record")?;
-            let query = {
-                let id: ObjectId = self.id().to_owned().into();
-                doc! { "_id": id }
-            };
+            let query = doc! { "_id": self.id().to_object_id() };
             let collection = T::collection(&ctx);
             let options = ReplaceOptions::builder().upsert(true).build();
             let mut transaction = transaction.lock().await;
@@ -92,10 +85,7 @@ impl<T: Entity> Record<T> {
         ctx.with_transaction(|ctx, transaction| async move {
             self.before_delete(&ctx).await?;
 
-            let query = {
-                let id: ObjectId = self.id().to_owned().into();
-                doc! { "_id": id }
-            };
+            let query = doc! { "_id": self.id().to_object_id() };
             let collection = T::collection(&ctx);
             let mut transaction = transaction.lock().await;
             let session = &mut transaction.session;

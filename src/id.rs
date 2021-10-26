@@ -2,74 +2,119 @@ use super::*;
 
 pub use bson::oid::ObjectId;
 
-#[derive(
-    Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
-)]
-pub struct GlobalId {
-    pub id: ObjectId,
-    pub namespace: String,
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EntityId<T: Entity> {
+    inner: ObjectId,
+    _phantom: PhantomData<T>,
 }
 
-impl Display for GlobalId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        let raw = format!("{}:{}", &self.namespace, &self.id);
-        let s = encode_base64(raw);
-        Display::fmt(&s, f)
+impl<T: Entity> Copy for EntityId<T> {}
+
+impl<T: Entity> EntityId<T> {
+    pub fn new() -> Self {
+        let inner = ObjectId::new();
+        Self {
+            inner,
+            _phantom: default(),
+        }
     }
 }
 
-impl FromStr for GlobalId {
+impl<T: Entity> EntityId<T> {
+    pub fn as_object_id(&self) -> &ObjectId {
+        &self.inner
+    }
+
+    pub fn to_object_id(&self) -> ObjectId {
+        self.inner
+    }
+}
+
+impl<T: Entity> Default for EntityId<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Entity> From<ObjectId> for EntityId<T> {
+    fn from(id: ObjectId) -> Self {
+        EntityId {
+            inner: id,
+            _phantom: default(),
+        }
+    }
+}
+
+impl<T: Entity> From<EntityId<T>> for ObjectId {
+    fn from(id: EntityId<T>) -> Self {
+        id.inner
+    }
+}
+
+impl<T: Entity> Debug for EntityId<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let s = format!("{}:{}", T::NAME, &self.inner);
+        f.write_str(&s)
+    }
+}
+
+impl<T: Entity> Display for EntityId<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let s = encode_base64(format!("{:?}", self));
+        f.write_str(&s)
+    }
+}
+
+impl<T: Entity> Serialize for EntityId<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = self.to_string();
+        s.serialize(serializer)
+    }
+}
+
+impl<'de, T: Entity> Deserialize<'de> for EntityId<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(|error| {
+            let message = format!("{:?}", error);
+            D::Error::custom(message)
+        })
+    }
+}
+
+impl<T: Entity> FromStr for EntityId<T> {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let raw = {
+        let s = {
             let data = decode_base64(s).context("failed to decode base64")?;
             String::from_utf8_lossy(&data[..]).into_owned()
         };
-        let segments = raw.split(':').collect::<Vec<_>>();
-        match segments[..] {
-            [namespace, id] => {
+        let segments = s.split(':').collect::<Vec<_>>();
+
+        let (id, entity_name) = match segments[..] {
+            [entity_name, id] => {
                 let id: ObjectId =
                     id.parse().context("failed to parse ObjectId")?;
-                let id = GlobalId {
-                    id,
-                    namespace: namespace.to_owned(),
-                };
-                Ok(id)
+                (id, entity_name.to_owned())
             }
-            _ => {
-                bail!("bad format")
-            }
+            _ => bail!("bad format"),
+        };
+        if entity_name != T::NAME {
+            bail!(
+                "incorrect entity name: expected {}, got {}",
+                T::NAME,
+                entity_name
+            );
         }
+
+        let id = Self::from(id);
+        Ok(id)
     }
-}
-
-pub trait EntityId
-where
-    Self: Debug,
-    Self: Clone + Copy,
-    Self: Into<ObjectId> + From<ObjectId>,
-{
-    type Entity: Entity;
-}
-
-impl<Id: EntityId> From<Id> for GlobalId {
-    fn from(id: Id) -> Self {
-        let namespace = Id::Entity::NAME;
-        let id: ObjectId = id.into();
-        GlobalId {
-            namespace: namespace.to_owned(),
-            id,
-        }
-    }
-}
-
-pub fn decode_base64<T: AsRef<[u8]>>(
-    input: T,
-) -> Result<Vec<u8>, Base64DecodeError> {
-    decode_base64_config(input, BASE64_CONFIG)
-}
-
-pub fn encode_base64<T: AsRef<[u8]>>(input: T) -> String {
-    encode_base64_config(input, BASE64_CONFIG)
 }

@@ -62,7 +62,8 @@ use base64::DecodeError as Base64DecodeError;
 use base64::URL_SAFE as BASE64_CONFIG;
 
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::de::Error as DeserializeError;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use bson::DateTime as BsonDateTime;
 use bson::{bson, doc, to_document};
@@ -85,4 +86,14 @@ fn default<T: Default>() -> T {
 
 fn now() -> DateTime {
     Utc::now()
+}
+
+fn decode_base64<T: AsRef<[u8]>>(
+    input: T,
+) -> Result<Vec<u8>, Base64DecodeError> {
+    decode_base64_config(input, BASE64_CONFIG)
+}
+
+fn encode_base64<T: AsRef<[u8]>>(input: T) -> String {
+    encode_base64_config(input, BASE64_CONFIG)
 }
