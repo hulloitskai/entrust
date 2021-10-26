@@ -21,7 +21,7 @@ impl<S: EntityServices> Clone for EntityContext<S> {
 }
 
 impl<S: EntityServices> EntityContext<S> {
-    pub fn new(services: S) -> Self {
+    pub fn new(services: impl Into<Arc<S>>) -> Self {
         Self {
             services: services.into(),
             transaction: None,
