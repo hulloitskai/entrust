@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Debug)]
 pub struct EntityContext<S: EntityServices> {
-    pub(super) services: Arc<S>,
+    pub(super) services: S,
     pub(super) transaction: Option<Arc<Mutex<Transaction>>>,
 }
 
@@ -21,9 +21,9 @@ impl<S: EntityServices> Clone for EntityContext<S> {
 }
 
 impl<S: EntityServices> EntityContext<S> {
-    pub fn new(services: impl Into<Arc<S>>) -> Self {
+    pub fn new(services: S) -> Self {
         Self {
-            services: services.into(),
+            services,
             transaction: None,
         }
     }

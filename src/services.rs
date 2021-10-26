@@ -1,6 +1,10 @@
 use super::*;
 
-pub trait EntityServices: Send + Sync {
+pub trait EntityServices
+where
+    Self: Send + Sync,
+    Self: Clone,
+{
     fn database(&self) -> &Database;
     fn database_client(&self) -> &DatabaseClient;
 }
