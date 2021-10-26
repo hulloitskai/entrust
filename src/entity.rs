@@ -128,7 +128,10 @@ impl<T: Entity> FindOneQuery<T> {
         MaybeFindOneQuery(inner)
     }
 
-    pub async fn load(self, ctx: &EntityContext<T::Services>) -> Result<T> {
+    pub async fn load(
+        self,
+        ctx: &EntityContext<T::Services>,
+    ) -> Result<Record<T>> {
         let Self(inner) = self;
         inner.load(ctx).await?.context("not found")
     }
@@ -151,11 +154,6 @@ impl<T: Entity> MaybeFindOneQuery<T> {
         Self(inner)
     }
 
-    // fn from_filter(filter: impl Into<Option<Document>>) -> Self {
-    //     let inner = FindOneQueryInner::from_filter(filter);
-    //     Self(inner)
-    // }
-
     pub fn required(self) -> FindOneQuery<T> {
         let Self(inner) = self;
         FindOneQuery(inner)
@@ -164,7 +162,7 @@ impl<T: Entity> MaybeFindOneQuery<T> {
     pub async fn load(
         self,
         ctx: &EntityContext<T::Services>,
-    ) -> Result<Option<T>> {
+    ) -> Result<Option<Record<T>>> {
         let Self(inner) = self;
         inner.load(ctx).await
     }
@@ -205,7 +203,7 @@ impl<T: Entity> FindOneQueryInner<T> {
     pub async fn load(
         self,
         ctx: &EntityContext<T::Services>,
-    ) -> Result<Option<T>> {
+    ) -> Result<Option<Record<T>>> {
         let Self {
             filter, options, ..
         } = self;
@@ -268,8 +266,8 @@ impl<T: Entity> FindOneQueryInner<T> {
             None => return Ok(None),
         };
 
-        let entity = T::from_document(doc)?;
-        Ok(Some(entity))
+        let record = Record::from_document(doc)?;
+        Ok(Some(record))
     }
 
     pub async fn exists(
