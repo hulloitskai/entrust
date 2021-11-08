@@ -120,6 +120,7 @@ impl<T: Entity> Object for Record<T> {
             doc.extend(meta);
             doc
         };
+
         Ok(doc)
     }
 

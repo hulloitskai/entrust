@@ -5,3 +5,5 @@ pub trait Object: Sized {
 
     fn from_document(doc: Document) -> Result<Self>;
 }
+
+pub use macros::Object;

@@ -8,6 +8,8 @@ use mongodb::options::FindOptions;
 use mongodb::error::Result as DatabaseResult;
 use mongodb::SessionCursor;
 
+use heck::MixedCase;
+
 #[async_trait]
 pub trait Entity
 where
@@ -22,8 +24,8 @@ where
     type Sorting: EntitySorting;
 
     fn collection(ctx: &EntityContext<Self::Services>) -> Collection<Document> {
-        let name = Self::NAME;
-        ctx.database().collection(name)
+        let name = Self::NAME.to_mixed_case();
+        ctx.database().collection(&name)
     }
 
     fn get(id: EntityId<Self>) -> FindOneQuery<Self> {

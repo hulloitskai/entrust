@@ -1,5 +1,3 @@
-pub use macros::Object;
-
 mod object;
 pub use object::*;
 
@@ -17,6 +15,8 @@ pub use context::*;
 
 mod id;
 pub use id::*;
+
+pub mod util;
 
 mod meta;
 pub use meta::*;
@@ -66,7 +66,7 @@ use serde::de::Error as DeserializeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use bson::DateTime as BsonDateTime;
-use bson::{bson, doc, to_document};
+use bson::{bson, doc, from_document, to_document};
 use bson::{Bson, Document};
 
 use async_trait::async_trait;
