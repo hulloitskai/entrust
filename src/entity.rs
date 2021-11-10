@@ -440,7 +440,6 @@ impl<T: Entity> FindQuery<T> {
         } else {
             if let Some(filter) = &filter {
                 trace!(
-                    target: "oyster-api::entities",
                     collection = collection.name(),
                     %filter,
                     options = %to_document(&options).unwrap(),
@@ -448,7 +447,6 @@ impl<T: Entity> FindQuery<T> {
                 );
             } else {
                 trace!(
-                    target: "oyster-api::entities",
                     collection = collection.name(),
                     options = %to_document(&options).unwrap(),
                     "finding all documents"
@@ -642,7 +640,6 @@ impl<T: Entity, U: Object> AggregateOneQueryInner<T, U> {
             Box::new(cursor)
         } else {
             trace!(
-                target: "oyster-api::entities",
                 collection = collection.name(),
                 pipeline = %bson!(pipeline.clone()),
                 "aggregating documents"
