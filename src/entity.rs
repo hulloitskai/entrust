@@ -29,6 +29,7 @@ where
     }
 
     fn get(id: EntityId<Self>) -> FindOneQuery<Self> {
+        let id = ObjectId::from(id);
         let filter = doc! { "_id": id };
         FindOneQuery::from_filter(filter)
     }

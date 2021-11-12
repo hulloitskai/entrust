@@ -51,12 +51,6 @@ impl<T: Entity> From<EntityId<T>> for ObjectId {
     }
 }
 
-impl<T: Entity> From<EntityId<T>> for Bson {
-    fn from(id: EntityId<T>) -> Self {
-        id.to_object_id().into()
-    }
-}
-
 impl<T: Entity> Debug for EntityId<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let s = format!("{}:{}", T::NAME, &self.inner);
