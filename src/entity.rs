@@ -83,29 +83,29 @@ where
     }
 
     async fn before_save(
-        &mut self,
-        _: &EntityContext<Self::Services>,
+        _record: &mut Record<Self>,
+        _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
 
     async fn before_delete(
-        &mut self,
-        _: &EntityContext<Self::Services>,
+        _record: &mut Record<Self>,
+        _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
 
     async fn after_save(
-        &mut self,
-        _: &EntityContext<Self::Services>,
+        _record: &mut Record<Self>,
+        _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
 
     async fn after_delete(
-        &mut self,
-        _: &EntityContext<Self::Services>,
+        _record: &mut Record<Self>,
+        _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }

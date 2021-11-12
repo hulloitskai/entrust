@@ -52,7 +52,7 @@ impl<T: Entity> Record<T> {
     ) -> Result<()> {
         self.validate().context("validation failed")?;
         ctx.with_transaction(|ctx, transaction| async move {
-            self.before_save(&ctx).await?;
+            T::before_save(self, &ctx).await?;
             self.meta.updated_at = now();
 
             let replacement =
@@ -72,7 +72,7 @@ impl<T: Entity> Record<T> {
                 .replace_one_with_session(query, replacement, options, session)
                 .await?;
 
-            self.after_save(&ctx).await?;
+            T::after_save(self, &ctx).await?;
             Ok(())
         })
         .await
@@ -83,7 +83,7 @@ impl<T: Entity> Record<T> {
         ctx: &EntityContext<T::Services>,
     ) -> Result<()> {
         ctx.with_transaction(|ctx, transaction| async move {
-            self.before_delete(&ctx).await?;
+            T::before_delete(self, &ctx).await?;
 
             let query = doc! { "_id": self.id().to_object_id() };
             let collection = T::collection(&ctx);
@@ -99,7 +99,7 @@ impl<T: Entity> Record<T> {
                 .delete_one_with_session(query, None, session)
                 .await?;
 
-            self.after_delete(&ctx).await?;
+            T::after_delete(self, &ctx).await?;
             Ok(())
         })
         .await
