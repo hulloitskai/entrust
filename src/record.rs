@@ -33,7 +33,7 @@ impl<T: Entity> Record<T> {
 
 impl<T: Entity> Record<T> {
     pub fn id(&self) -> EntityId<T> {
-        self.meta.id.into()
+        self.meta.id
     }
 
     pub fn created_at(&self) -> DateTime {

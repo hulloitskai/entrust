@@ -196,7 +196,7 @@ dependencies = [
 
 [[package]]
 name = "entrust"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "entrust-macros"
-version = "0.2.1"
+version = "0.2.4"
 dependencies = [
  "proc-macro2",
  "quote",

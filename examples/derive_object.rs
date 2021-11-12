@@ -35,7 +35,7 @@ impl Object for Person {
             first_name: first_name.to_owned(),
             last_name: last_name.to_owned(),
             candies: candies
-                .into_iter()
+                .iter()
                 .map(Object::to_document)
                 .collect::<Result<_>>()
                 .context("failed to encode candy to document")?,
