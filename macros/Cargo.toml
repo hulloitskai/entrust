@@ -1,6 +1,6 @@
 [package]
 name = "entrust-macros"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2018"
 rust-version = "1.56.0"
 

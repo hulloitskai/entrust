@@ -369,15 +369,22 @@ impl<T: Entity> FindQuery<T> {
         self
     }
 
-    pub fn skip(mut self, n: impl Into<Option<u32>>) -> Self {
-        let n: Option<u32> = n.into();
-        self.options.skip = n.map(Into::into);
+    pub fn skip(mut self, n: impl Into<Option<u64>>) -> Self {
+        self.options.skip = n.into();
         self
     }
 
-    pub fn take(mut self, n: impl Into<Option<u32>>) -> Self {
-        let n: Option<u32> = n.into();
-        self.options.limit = n.map(Into::into);
+    pub fn take(mut self, n: impl Into<Option<u64>>) -> Self {
+        let n: Option<u64> = n.into();
+        self.options.limit = n.map(|n| {
+            i64::try_from(n).unwrap_or_else(|_| {
+                warn!(
+                    take = n,
+                    "take option has overflowing value; using i64::MAX instead"
+                );
+                i64::MAX
+            })
+        });
         self
     }
 

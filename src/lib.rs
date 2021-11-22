@@ -72,7 +72,7 @@ use bson::{Bson, Document};
 use async_trait::async_trait;
 use pin_project::pin_project;
 use tokio::sync::Mutex;
-use tracing::trace;
+use tracing::{trace, warn};
 use typed_builder::TypedBuilder as Builder;
 
 use chrono::DateTime as ChronoDateTime;
