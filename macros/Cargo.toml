@@ -1,6 +1,6 @@
 [package]
 name = "entrust-macros"
-version = "0.2.7"
+version = "0.2.8"
 edition = "2018"
 rust-version = "1.56.0"
 
@@ -10,8 +10,8 @@ proc-macro = true
 
 
 [dependencies]
-proc-macro2 = "^1.0.29"
-quote = "^1.0.9"
+proc_macro2 = { package = "proc-macro2", version = "^1.0.32" }
+quote = "^1.0.10"
 
 [dependencies.syn]
 version = "^1.0.77"
