@@ -1,6 +1,6 @@
 [package]
 name = "entrust-macros"
-version = "0.2.8"
+version = "0.2.9"
 edition = "2018"
 rust-version = "1.56.0"
 
@@ -14,7 +14,7 @@ proc_macro2 = { package = "proc-macro2", version = "^1.0.32" }
 quote = "^1.0.10"
 
 [dependencies.syn]
-version = "^1.0.77"
+version = "^1.0.82"
 default-features = false
 features = ["derive", "proc-macro"]
 

@@ -5,6 +5,7 @@ pub struct EntityMeta<T: Entity> {
     pub id: EntityId<T>,
     pub created_at: DateTime,
     pub updated_at: DateTime,
+    pub deleted_at: Option<DateTime>,
 }
 
 impl<T: Entity> EntityMeta<T> {
@@ -14,7 +15,12 @@ impl<T: Entity> EntityMeta<T> {
             id: default(),
             created_at,
             updated_at: created_at,
+            deleted_at: default(),
         }
+    }
+
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_at.is_some()
     }
 }
 
@@ -30,12 +36,14 @@ impl<T: Entity> Clone for EntityMeta<T> {
             id,
             created_at,
             updated_at,
+            deleted_at,
         } = self;
 
         Self {
             id: *id,
             created_at: *created_at,
             updated_at: *updated_at,
+            deleted_at: *deleted_at,
         }
     }
 }
@@ -48,8 +56,11 @@ struct EntityMetaDocument {
     #[serde(rename = "_createdAt")]
     pub created_at: BsonDateTime,
 
-    #[serde(rename = "_updatedAt")]
-    pub updated_at: BsonDateTime,
+    #[serde(rename = "_updatedAt", skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<BsonDateTime>,
+
+    #[serde(rename = "_deletedAt", skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<BsonDateTime>,
 }
 
 impl<T: Entity> Object for EntityMeta<T> {
@@ -58,12 +69,20 @@ impl<T: Entity> Object for EntityMeta<T> {
             id,
             created_at,
             updated_at,
+            deleted_at,
         } = self.to_owned();
+
+        let updated_at = if created_at != updated_at {
+            Some(updated_at.into())
+        } else {
+            None
+        };
 
         let doc = EntityMetaDocument {
             id: id.to_object_id(),
             created_at: created_at.into(),
-            updated_at: updated_at.into(),
+            updated_at,
+            deleted_at: deleted_at.map(Into::into),
         };
         let doc = to_document(&doc)?;
         Ok(doc)
@@ -74,12 +93,19 @@ impl<T: Entity> Object for EntityMeta<T> {
             id,
             created_at,
             updated_at,
+            deleted_at,
         } = from_document(doc)?;
+
+        let created_at = created_at.to_chrono();
+        let updated_at = updated_at
+            .map(BsonDateTime::to_chrono)
+            .unwrap_or(created_at);
 
         let meta = EntityMeta {
             id: id.into(),
-            created_at: created_at.to_chrono(),
-            updated_at: updated_at.to_chrono(),
+            created_at,
+            updated_at,
+            deleted_at: deleted_at.map(BsonDateTime::to_chrono),
         };
         Ok(meta)
     }

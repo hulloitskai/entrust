@@ -43,6 +43,14 @@ impl<T: Entity> Record<T> {
     pub fn updated_at(&self) -> DateTime {
         self.meta.updated_at
     }
+
+    pub fn deleted_at(&self) -> Option<DateTime> {
+        self.meta.deleted_at
+    }
+
+    pub fn is_deleted(&self) -> bool {
+        self.meta.is_deleted()
+    }
 }
 
 impl<T: Entity> Record<T> {
@@ -78,12 +86,12 @@ impl<T: Entity> Record<T> {
         .await
     }
 
-    pub async fn delete(
+    pub async fn destroy(
         &mut self,
         ctx: &EntityContext<T::Services>,
     ) -> Result<()> {
         ctx.with_transaction(|ctx, transaction| async move {
-            T::before_delete(self, &ctx).await?;
+            T::before_destroy(self, &ctx).await?;
 
             let query = doc! { "_id": self.id().to_object_id() };
             let collection = T::collection(&ctx);
@@ -93,16 +101,41 @@ impl<T: Entity> Record<T> {
             trace!(
                 collection = collection.name(),
                 %query,
-                "deleting document"
+                "destroying document"
             );
             collection
                 .delete_one_with_session(query, None, session)
                 .await?;
 
+            T::after_destroy(self, &ctx).await?;
+            Ok(())
+        })
+        .await
+    }
+}
+
+impl<T: Entity> Record<T> {
+    pub async fn delete(
+        &mut self,
+        ctx: &EntityContext<T::Services>,
+    ) -> Result<()> {
+        ctx.transact(|ctx| async move {
+            self.meta.deleted_at = Some(now());
+            T::before_delete(self, &ctx).await?;
+            self.save(&ctx).await?;
             T::after_delete(self, &ctx).await?;
             Ok(())
         })
         .await
+    }
+
+    pub async fn restore(
+        &mut self,
+        ctx: &EntityContext<T::Services>,
+    ) -> Result<()> {
+        self.meta.deleted_at = None;
+        self.save(ctx).await?;
+        Ok(())
     }
 }
 

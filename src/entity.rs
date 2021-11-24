@@ -46,7 +46,17 @@ where
     }
 
     fn all() -> FindQuery<Self> {
+        let filter = doc! { "_deletedAt": { "$exists": false } };
+        FindQuery::from_filter(filter)
+    }
+
+    fn with_deleted() -> FindQuery<Self> {
         Self::find(None)
+    }
+
+    fn only_deleted() -> FindQuery<Self> {
+        let filter = doc! { "_deletedAt": { "$exists": true} };
+        FindQuery::from_filter(filter)
     }
 
     fn find(
@@ -97,6 +107,13 @@ where
         Ok(())
     }
 
+    async fn before_destroy(
+        _record: &mut Record<Self>,
+        _ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     async fn after_save(
         _record: &mut Record<Self>,
         _ctx: &EntityContext<Self::Services>,
@@ -105,6 +122,13 @@ where
     }
 
     async fn after_delete(
+        _record: &mut Record<Self>,
+        _ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn after_destroy(
         _record: &mut Record<Self>,
         _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
