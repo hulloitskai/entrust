@@ -19,7 +19,7 @@ impl<T: Entity> EntityMeta<T> {
         }
     }
 
-    pub fn is_deleted(&self) -> bool {
+    pub fn is_archived(&self) -> bool {
         self.deleted_at.is_some()
     }
 }

@@ -100,14 +100,21 @@ where
         Ok(())
     }
 
-    async fn before_delete(
+    async fn before_archive(
         _record: &mut Record<Self>,
         _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
 
-    async fn before_destroy(
+    async fn before_restore(
+        _record: &mut Record<Self>,
+        _ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn before_delete(
         _record: &mut Record<Self>,
         _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
@@ -121,14 +128,21 @@ where
         Ok(())
     }
 
-    async fn after_delete(
+    async fn after_archive(
         _record: &mut Record<Self>,
         _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
 
-    async fn after_destroy(
+    async fn after_restore(
+        _record: &mut Record<Self>,
+        _ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn after_delete(
         _record: &mut Record<Self>,
         _ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {

@@ -48,8 +48,8 @@ impl<T: Entity> Record<T> {
         self.meta.deleted_at
     }
 
-    pub fn is_deleted(&self) -> bool {
-        self.meta.is_deleted()
+    pub fn is_archived(&self) -> bool {
+        self.meta.is_archived()
     }
 }
 
@@ -86,12 +86,12 @@ impl<T: Entity> Record<T> {
         .await
     }
 
-    pub async fn destroy(
+    pub async fn delete(
         &mut self,
         ctx: &EntityContext<T::Services>,
     ) -> Result<()> {
         ctx.with_transaction(|ctx, transaction| async move {
-            T::before_destroy(self, &ctx).await?;
+            T::before_delete(self, &ctx).await?;
 
             let query = doc! { "_id": self.id().to_object_id() };
             let collection = T::collection(&ctx);
@@ -101,13 +101,13 @@ impl<T: Entity> Record<T> {
             trace!(
                 collection = collection.name(),
                 %query,
-                "destroying document"
+                "deleting document"
             );
             collection
                 .delete_one_with_session(query, None, session)
                 .await?;
 
-            T::after_destroy(self, &ctx).await?;
+            T::after_delete(self, &ctx).await?;
             Ok(())
         })
         .await
@@ -115,15 +115,15 @@ impl<T: Entity> Record<T> {
 }
 
 impl<T: Entity> Record<T> {
-    pub async fn delete(
+    pub async fn archive(
         &mut self,
         ctx: &EntityContext<T::Services>,
     ) -> Result<()> {
         ctx.transact(|ctx| async move {
+            T::before_archive(self, &ctx).await?;
             self.meta.deleted_at = Some(now());
-            T::before_delete(self, &ctx).await?;
             self.save(&ctx).await?;
-            T::after_delete(self, &ctx).await?;
+            T::after_archive(self, &ctx).await?;
             Ok(())
         })
         .await
@@ -133,9 +133,14 @@ impl<T: Entity> Record<T> {
         &mut self,
         ctx: &EntityContext<T::Services>,
     ) -> Result<()> {
-        self.meta.deleted_at = None;
-        self.save(ctx).await?;
-        Ok(())
+        ctx.transact(|ctx| async move {
+            T::before_restore(self, &ctx).await?;
+            self.meta.deleted_at = None;
+            self.save(&ctx).await?;
+            T::after_restore(self, &ctx).await?;
+            Ok(())
+        })
+        .await
     }
 }
 
