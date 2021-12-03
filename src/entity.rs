@@ -253,51 +253,39 @@ impl<T: Entity> FindOneQueryInner<T> {
         let doc = if let Some(transaction) = &ctx.transaction {
             let mut transaction = transaction.lock().await;
             let session = &mut transaction.session;
-            {
-                let options = {
-                    let options = FindOptions::from(options.clone());
-                    to_document(&options).unwrap()
-                };
-                if let Some(filter) = &filter {
-                    trace!(
-                        collection = collection.name(),
-                        session = %session.id(),
-                        %filter,
-                        %options,
-                        "finding document"
-                    );
-                } else {
-                    trace!(
-                        collection = collection.name(),
-                        session = %session.id(),
-                        %options,
-                        "finding a document"
-                    );
-                }
+            if let Some(filter) = &filter {
+                trace!(
+                    collection = collection.name(),
+                    session = %session.id(),
+                    %filter,
+                    options = %format_find_one_options(&options),
+                    "finding document"
+                );
+            } else {
+                trace!(
+                    collection = collection.name(),
+                    session = %session.id(),
+                    options = %format_find_one_options(&options),
+                    "finding a document"
+                );
             }
             collection
                 .find_one_with_session(filter, options, session)
                 .await?
         } else {
-            {
-                let options = {
-                    let options = FindOptions::from(options.clone());
-                    to_document(&options).unwrap()
-                };
-                if let Some(filter) = &filter {
-                    trace!(
-                        collection = collection.name(),
-                        %filter,
-                        %options,
-                        "finding document"
-                    );
-                } else {
-                    trace!(
-                        collection = collection.name(),
-                        %options,
-                        "finding a document"
-                    );
-                }
+            if let Some(filter) = &filter {
+                trace!(
+                    collection = collection.name(),
+                    %filter,
+                    options = %format_find_one_options(&options),
+                    "finding document"
+                );
+            } else {
+                trace!(
+                    collection = collection.name(),
+                    options = %format_find_one_options(&options),
+                    "finding a document"
+                );
             }
             collection.find_one(filter, options).await?
         };
@@ -466,14 +454,14 @@ impl<T: Entity> FindQuery<T> {
                         collection = collection.name(),
                         session = %session.id(),
                         %filter,
-                        options = %to_document(&options).unwrap(),
+                        options = %format_find_options(&options),
                         "finding documents"
                     );
                 } else {
                     trace!(
                         collection = collection.name(),
                         session = %session.id(),
-                        options = %to_document(&options).unwrap(),
+                        options = %format_find_options(&options),
                         "finding all documents"
                     );
                 }
@@ -488,13 +476,13 @@ impl<T: Entity> FindQuery<T> {
                 trace!(
                     collection = collection.name(),
                     %filter,
-                    options = %to_document(&options).unwrap(),
+                    options = %format_find_options(&options),
                     "finding documents"
                 );
             } else {
                 trace!(
                     collection = collection.name(),
-                    options = %to_document(&options).unwrap(),
+                    options = %format_find_options(&options),
                     "finding all documents"
                 );
             }
@@ -537,45 +525,39 @@ impl<T: Entity> FindQuery<T> {
         let count = if let Some(transaction) = &ctx.transaction {
             let mut transaction = transaction.lock().await;
             let session = &mut transaction.session;
-            {
-                let options = to_document(&find_options).unwrap();
-                if let Some(filter) = &filter {
-                    trace!(
-                        collection = collection.name(),
-                        session = %session.id(),
-                        %filter,
-                        %options,
-                        "counting documents"
-                    );
-                } else {
-                    trace!(
-                        collection = collection.name(),
-                        session = %session.id(),
-                        %options,
-                        "counting documents"
-                    );
-                }
+            if let Some(filter) = &filter {
+                trace!(
+                    collection = collection.name(),
+                    session = %session.id(),
+                    %filter,
+                    options = %format_find_options(&find_options),
+                    "counting documents"
+                );
+            } else {
+                trace!(
+                    collection = collection.name(),
+                    session = %session.id(),
+                    options = %format_find_options(&find_options),
+                    "counting documents"
+                );
             }
             collection
                 .count_documents_with_session(filter, options, session)
                 .await?
         } else {
-            {
-                let options = to_document(&find_options).unwrap();
-                if let Some(filter) = &filter {
-                    trace!(
-                        collection = collection.name(),
-                        %filter,
-                        %options,
-                        "counting documents"
-                    );
-                } else {
-                    trace!(
-                        collection = collection.name(),
-                        %options,
-                        "counting documents"
-                    );
-                }
+            if let Some(filter) = &filter {
+                trace!(
+                    collection = collection.name(),
+                    %filter,
+                    options = %format_find_options(&find_options),
+                    "counting documents"
+                );
+            } else {
+                trace!(
+                    collection = collection.name(),
+                    options = %format_find_options(&find_options),
+                    "counting documents"
+                );
             }
             collection.count_documents(filter, None).await?
         };
@@ -656,14 +638,16 @@ impl<T: Entity, U: Object> AggregateOneQueryInner<T, U> {
         ctx: &EntityContext<T::Services>,
     ) -> Result<Option<U>> {
         let Self {
-            options,
-            mut pipeline,
-            ..
+            options, pipeline, ..
         } = self;
 
-        pipeline.push(doc! {
-            "$limit": 1
-        });
+        let pipeline = {
+            let mut pipeline = pipeline;
+            pipeline.push(doc! {
+                "$limit": 1
+            });
+            pipeline
+        };
 
         let collection = T::collection(ctx);
         let mut cursor: Box<
@@ -675,7 +659,7 @@ impl<T: Entity, U: Object> AggregateOneQueryInner<T, U> {
                 trace!(
                     collection = collection.name(),
                     session = %session.id(),
-                    pipeline = %bson!(pipeline.clone()),
+                    pipeline = %format_pipeline(&pipeline),
                     "aggregating documents"
                 );
                 collection
@@ -687,7 +671,7 @@ impl<T: Entity, U: Object> AggregateOneQueryInner<T, U> {
         } else {
             trace!(
                 collection = collection.name(),
-                pipeline = %bson!(pipeline.clone()),
+                pipeline = %format_pipeline(&pipeline),
                 "aggregating documents"
             );
             let cursor = collection.aggregate(pipeline, options).await?;
@@ -743,23 +727,27 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
         ctx: &EntityContext<T::Services>,
     ) -> Result<impl Stream<Item = Result<U>>> {
         let Self {
-            mut pipeline,
+            pipeline,
             options,
             skip,
             take,
             ..
         } = self;
 
-        if let Some(skip) = skip {
-            pipeline.push(doc! {
-                "$skip": skip
-            });
-        }
-        if let Some(take) = take {
-            pipeline.push(doc! {
-                "$limit": take
-            });
-        }
+        let pipeline = {
+            let mut pipeline = pipeline;
+            if let Some(skip) = skip {
+                pipeline.push(doc! {
+                    "$skip": skip
+                });
+            }
+            if let Some(take) = take {
+                pipeline.push(doc! {
+                    "$limit": take
+                });
+            }
+            pipeline
+        };
 
         let collection = T::collection(ctx);
         let cursor: Box<
@@ -771,8 +759,8 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
                 trace!(
                     collection = collection.name(),
                     session = %session.id(),
-                    pipeline = %bson!(pipeline.clone()),
-                    ?options,
+                    pipeline = %format_pipeline(&pipeline),
+                    options = %format_aggregate_options(&options),
                     "aggregating documents"
                 );
                 collection
@@ -784,8 +772,8 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
         } else {
             trace!(
                 collection = collection.name(),
-                pipeline = %bson!(pipeline.clone()),
-                ?options,
+                pipeline = %format_pipeline(&pipeline),
+                options = %format_aggregate_options(&options),
                 "aggregating documents"
             );
             let cursor = collection.aggregate(pipeline, options).await?;
@@ -805,26 +793,30 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
         ctx: &EntityContext<T::Services>,
     ) -> Result<u64> {
         let Self {
-            mut pipeline,
+            pipeline,
             options,
             skip,
             take,
             ..
         } = self;
 
-        if let Some(skip) = skip {
+        let pipeline = {
+            let mut pipeline = pipeline;
+            if let Some(skip) = skip {
+                pipeline.push(doc! {
+                    "$skip": skip
+                });
+            }
+            if let Some(take) = take {
+                pipeline.push(doc! {
+                    "$limit": take
+                });
+            }
             pipeline.push(doc! {
-                "$skip": skip
+                "$count": "_count"
             });
-        }
-        if let Some(take) = take {
-            pipeline.push(doc! {
-                "$limit": take
-            });
-        }
-        pipeline.push(doc! {
-            "$count": "_count"
-        });
+            pipeline
+        };
 
         let collection = T::collection(ctx);
         let result: Document = if let Some(transaction) = &ctx.transaction {
@@ -833,8 +825,8 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
             trace!(
                 collection = collection.name(),
                 session = %session.id(),
-                pipeline = %bson!(pipeline.clone()),
-                ?options,
+                pipeline = %format_pipeline(&pipeline),
+                options = %format_aggregate_options(&options),
                 "counting aggregated documents"
             );
             let mut cursor = {
@@ -846,8 +838,8 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
         } else {
             trace!(
                 collection = collection.name(),
-                pipeline = %bson!(pipeline.clone()),
-                ?options,
+                pipeline = %format_pipeline(&pipeline),
+                options = %format_aggregate_options(&options),
                 "counting aggregated documents"
             );
             let mut cursor = collection.aggregate(pipeline, options).await?;
@@ -909,4 +901,22 @@ where
         pin_mut!(future);
         future.poll(cx)
     }
+}
+
+fn format_find_one_options(options: &FindOneOptions) -> impl Display {
+    let options = FindOptions::from(options.to_owned());
+    format_find_options(&options)
+}
+
+fn format_find_options(options: &FindOptions) -> impl Display {
+    to_document(options).unwrap()
+}
+
+fn format_aggregate_options(options: &AggregateOptions) -> impl Display {
+    to_document(options).unwrap()
+}
+
+fn format_pipeline(pipeline: &[Document]) -> impl Display {
+    let pipeline = pipeline.iter().cloned().map(Bson::from).collect::<Vec<_>>();
+    Bson::Array(pipeline)
 }
