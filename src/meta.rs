@@ -5,6 +5,8 @@ pub struct EntityMeta<T: Entity> {
     pub id: EntityId<T>,
     pub created_at: DateTime,
     pub updated_at: DateTime,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<DateTime>,
 }
 
