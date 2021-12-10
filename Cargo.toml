@@ -1,6 +1,6 @@
 [package]
 name = "entrust"
-version = "0.2.12"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.56.0"
 
@@ -11,7 +11,6 @@ async_trait = { package = "async-trait", version = "^0.1.51" }
 base64 = "^0.13.0"
 bson = { version = "2.1.0-beta", features = ["chrono-0_4"] }
 heck = "^0.3.3"
-macros = { package = "entrust-macros", path = "./macros" }
 mongodb = "2.1.0-beta"
 pin_project = { package = "pin-project", version = "^1.0.8" }
 serde = { version = "^1.0.130", features = ["derive"] }

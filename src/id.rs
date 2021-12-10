@@ -20,16 +20,6 @@ impl<T: Entity> EntityId<T> {
     }
 }
 
-impl<T: Entity> EntityId<T> {
-    pub fn as_object_id(&self) -> &ObjectId {
-        &self.inner
-    }
-
-    pub fn to_object_id(&self) -> ObjectId {
-        self.inner
-    }
-}
-
 impl<T: Entity> Default for EntityId<T> {
     fn default() -> Self {
         Self::new()
@@ -48,6 +38,13 @@ impl<T: Entity> From<ObjectId> for EntityId<T> {
 impl<T: Entity> From<EntityId<T>> for ObjectId {
     fn from(id: EntityId<T>) -> Self {
         id.inner
+    }
+}
+
+impl<T: Entity> From<EntityId<T>> for Bson {
+    fn from(id: EntityId<T>) -> Self {
+        let id: ObjectId = id.into();
+        id.into()
     }
 }
 

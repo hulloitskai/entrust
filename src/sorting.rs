@@ -1,14 +1,14 @@
 use super::*;
 
 pub trait EntitySorting {
-    fn into_document(self) -> Document;
+    fn to_document(&self) -> Document;
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EmptySorting;
 
 impl EntitySorting for EmptySorting {
-    fn into_document(self) -> Document {
+    fn to_document(&self) -> Document {
         default()
     }
 }

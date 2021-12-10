@@ -1,6 +1,3 @@
-mod object;
-pub use object::*;
-
 mod transaction;
 use transaction::*;
 
@@ -18,14 +15,11 @@ pub use id::*;
 
 pub mod util;
 
-mod meta;
-pub use meta::*;
+mod object;
+pub use object::*;
 
 mod entity;
 pub use entity::*;
-
-mod record;
-pub use record::*;
 
 mod comparison;
 pub use comparison::*;
@@ -36,12 +30,18 @@ pub use conditions::*;
 mod sorting;
 pub use sorting::*;
 
+mod updateable;
+pub use updateable::*;
+
+mod discardable;
+pub use discardable::*;
+
 use std::convert::TryFrom;
 use std::fmt::Result as FmtResult;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::FromIterator;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -65,8 +65,7 @@ use serde::de::DeserializeOwned;
 use serde::de::Error as DeserializeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use bson::DateTime as BsonDateTime;
-use bson::{bson, doc, from_document, to_document};
+use bson::{bson, doc, to_document};
 use bson::{Bson, Document};
 
 use async_trait::async_trait;

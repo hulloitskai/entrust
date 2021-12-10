@@ -4,6 +4,7 @@ use mongodb::options::AggregateOptions;
 use mongodb::options::CountOptions;
 use mongodb::options::FindOneOptions;
 use mongodb::options::FindOptions;
+use mongodb::options::ReplaceOptions;
 
 use mongodb::error::Result as DatabaseResult;
 use mongodb::SessionCursor;
@@ -23,13 +24,14 @@ where
     type Conditions: EntityConditions;
     type Sorting: EntitySorting;
 
+    fn id(&self) -> EntityId<Self>;
+
     fn collection(ctx: &EntityContext<Self::Services>) -> Collection<Document> {
         let name = Self::NAME.to_mixed_case();
         ctx.database().collection(&name)
     }
 
     fn get(id: EntityId<Self>) -> FindOneQuery<Self> {
-        let id = ObjectId::from(id);
         let filter = doc! { "_id": id };
         FindOneQuery::from_filter(filter)
     }
@@ -37,10 +39,7 @@ where
     fn get_many(
         ids: impl IntoIterator<Item = EntityId<Self>>,
     ) -> FindQuery<Self> {
-        let ids = {
-            let ids = ids.into_iter().map(ObjectId::from);
-            Bson::from_iter(ids)
-        };
+        let ids = Bson::from_iter(ids);
         let filter = doc! { "_id": { "$in": ids } };
         FindQuery::from_filter(filter)
     }
@@ -71,15 +70,15 @@ where
         FindOneQuery::new(conditions)
     }
 
-    fn aggregate<U: Object>(
+    fn aggregate<T: Object>(
         pipeline: impl IntoIterator<Item = Document>,
-    ) -> AggregateQuery<Self, U> {
+    ) -> AggregateQuery<Self, T> {
         AggregateQuery::new(pipeline)
     }
 
-    fn aggregate_one<U: Object>(
+    fn aggregate_one<T: Object>(
         pipeline: impl IntoIterator<Item = Document>,
-    ) -> AggregateOneQuery<Self, U> {
+    ) -> AggregateOneQuery<Self, T> {
         AggregateOneQuery::new(pipeline)
     }
 
@@ -89,62 +88,99 @@ where
         Ok(count)
     }
 
+    async fn save(
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        self.validate().context("validation failed")?;
+        ctx.with_transaction(|ctx, transaction| async move {
+            let collection = Self::collection(&ctx);
+            let options = ReplaceOptions::builder().upsert(true).build();
+
+            let id = self.id();
+            let replacement =
+                self.to_document().context("failed to serialize record")?;
+            let query = doc! { "_id": id };
+
+            let mut transaction = transaction.lock().await;
+            let session = &mut transaction.session;
+
+            self.before_save(&ctx).await?;
+            trace!(
+                collection = collection.name(),
+                %query,
+                "saving document"
+            );
+            collection
+                .replace_one_with_session(query, replacement, options, session)
+                .await?;
+            self.after_save(&ctx).await?;
+
+            Ok(())
+        })
+        .await
+    }
+
+    async fn delete(
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        ctx.with_transaction(|ctx, transaction| async move {
+            let collection = Self::collection(&ctx);
+
+            let id = self.id();
+            let query = doc! { "_id": id };
+            let mut transaction = transaction.lock().await;
+            let session = &mut transaction.session;
+
+            self.before_delete(&ctx).await?;
+            trace!(
+                collection = collection.name(),
+                %query,
+                "deleting document"
+            );
+            collection
+                .delete_one_with_session(query, None, session)
+                .await?;
+            self.after_delete(&ctx).await?;
+
+            Ok(())
+        })
+        .await
+    }
+
     fn validate(&self) -> Result<()> {
         Ok(())
     }
 
+    #[allow(unused_variables)]
     async fn before_save(
-        _record: &mut Record<Self>,
-        _ctx: &EntityContext<Self::Services>,
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
 
-    async fn before_archive(
-        _record: &mut Record<Self>,
-        _ctx: &EntityContext<Self::Services>,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    async fn before_restore(
-        _record: &mut Record<Self>,
-        _ctx: &EntityContext<Self::Services>,
-    ) -> Result<()> {
-        Ok(())
-    }
-
+    #[allow(unused_variables)]
     async fn before_delete(
-        _record: &mut Record<Self>,
-        _ctx: &EntityContext<Self::Services>,
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
 
+    #[allow(unused_variables)]
     async fn after_save(
-        _record: &mut Record<Self>,
-        _ctx: &EntityContext<Self::Services>,
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
 
-    async fn after_archive(
-        _record: &mut Record<Self>,
-        _ctx: &EntityContext<Self::Services>,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    async fn after_restore(
-        _record: &mut Record<Self>,
-        _ctx: &EntityContext<Self::Services>,
-    ) -> Result<()> {
-        Ok(())
-    }
-
+    #[allow(unused_variables)]
     async fn after_delete(
-        _record: &mut Record<Self>,
-        _ctx: &EntityContext<Self::Services>,
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
     }
@@ -169,10 +205,7 @@ impl<T: Entity> FindOneQuery<T> {
         MaybeFindOneQuery(inner)
     }
 
-    pub async fn load(
-        self,
-        ctx: &EntityContext<T::Services>,
-    ) -> Result<Record<T>> {
+    pub async fn load(self, ctx: &EntityContext<T::Services>) -> Result<T> {
         let Self(inner) = self;
         inner.load(ctx).await?.context("not found")
     }
@@ -203,7 +236,7 @@ impl<T: Entity> MaybeFindOneQuery<T> {
     pub async fn load(
         self,
         ctx: &EntityContext<T::Services>,
-    ) -> Result<Option<Record<T>>> {
+    ) -> Result<Option<T>> {
         let Self(inner) = self;
         inner.load(ctx).await
     }
@@ -228,7 +261,7 @@ impl<T: Entity> FindOneQueryInner<T> {
     pub fn new(conditions: impl Into<Option<T::Conditions>>) -> Self {
         let filter: Option<Document> = {
             let conditions: Option<_> = conditions.into();
-            conditions.map(EntityConditions::into_document)
+            conditions.as_ref().map(EntityConditions::to_document)
         };
         Self::from_filter(filter)
     }
@@ -244,7 +277,7 @@ impl<T: Entity> FindOneQueryInner<T> {
     pub async fn load(
         self,
         ctx: &EntityContext<T::Services>,
-    ) -> Result<Option<Record<T>>> {
+    ) -> Result<Option<T>> {
         let Self {
             filter, options, ..
         } = self;
@@ -294,9 +327,8 @@ impl<T: Entity> FindOneQueryInner<T> {
             Some(doc) => doc,
             None => return Ok(None),
         };
-
-        let record = Record::from_document(doc)?;
-        Ok(Some(record))
+        let object = T::from_document(doc)?;
+        Ok(Some(object))
     }
 
     pub async fn exists(
@@ -352,7 +384,7 @@ impl<T: Entity> FindQuery<T> {
     pub fn new(conditions: impl Into<Option<T::Conditions>>) -> Self {
         let filter: Option<Document> = {
             let conditions: Option<_> = conditions.into();
-            conditions.map(EntityConditions::into_document)
+            conditions.as_ref().map(EntityConditions::to_document)
         };
         Self::from_filter(filter)
     }
@@ -379,7 +411,7 @@ impl<T: Entity> FindQuery<T> {
     pub fn and(mut self, conditions: impl Into<Option<T::Conditions>>) -> Self {
         let incoming: Option<Document> = {
             let conditions: Option<_> = conditions.into();
-            conditions.map(EntityConditions::into_document)
+            conditions.as_ref().map(EntityConditions::to_document)
         };
         if let Some(incoming) = incoming {
             let filter = match self.filter {
@@ -419,7 +451,7 @@ impl<T: Entity> FindQuery<T> {
         let incoming: Option<_> = sorting.into();
         self.options.sort = match incoming {
             Some(incoming) => {
-                let incoming = incoming.into_document();
+                let incoming = incoming.to_document();
                 let combined = match existing {
                     Some(mut existing) => {
                         existing.extend(incoming);
@@ -437,7 +469,7 @@ impl<T: Entity> FindQuery<T> {
     pub async fn load<'a>(
         self,
         ctx: &EntityContext<T::Services>,
-    ) -> Result<impl Stream<Item = Result<Record<T>>>> {
+    ) -> Result<impl Stream<Item = Result<T>>> {
         let Self {
             filter, options, ..
         } = self;
@@ -495,8 +527,7 @@ impl<T: Entity> FindQuery<T> {
                 Ok(doc) => doc,
                 Err(error) => return Err(error.into()),
             };
-            let record = Record::<T>::from_document(doc)?;
-            Ok(record)
+            T::from_document(doc)
         });
         Ok(stream)
     }
@@ -508,6 +539,7 @@ impl<T: Entity> FindQuery<T> {
             ..
         } = self;
         let collection = T::collection(ctx);
+
         let options = {
             let FindOptions {
                 limit,
@@ -640,6 +672,7 @@ impl<T: Entity, U: Object> AggregateOneQueryInner<T, U> {
         let Self {
             options, pipeline, ..
         } = self;
+        let collection = T::collection(ctx);
 
         let pipeline = {
             let mut pipeline = pipeline;
@@ -649,7 +682,6 @@ impl<T: Entity, U: Object> AggregateOneQueryInner<T, U> {
             pipeline
         };
 
-        let collection = T::collection(ctx);
         let mut cursor: Box<
             dyn Stream<Item = DatabaseResult<Document>> + Send + Unpin,
         > = if let Some(transaction) = &ctx.transaction {
@@ -733,6 +765,7 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
             take,
             ..
         } = self;
+        let collection = T::collection(ctx);
 
         let pipeline = {
             let mut pipeline = pipeline;
@@ -749,7 +782,6 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
             pipeline
         };
 
-        let collection = T::collection(ctx);
         let cursor: Box<
             dyn Stream<Item = DatabaseResult<Document>> + Send + Unpin,
         > = if let Some(transaction) = &ctx.transaction {
@@ -780,10 +812,9 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
             Box::new(cursor)
         };
 
-        let stream = cursor.map(|doc| -> Result<U> {
-            let object = U::from_document(doc?)
-                .context("failed to deserialize object")?;
-            Ok(object)
+        let stream = cursor.map(|result| -> Result<U> {
+            let doc = result?;
+            U::from_document(doc).context("failed to deserialize object")
         });
         Ok(stream)
     }
@@ -799,6 +830,7 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
             take,
             ..
         } = self;
+        let collection = T::collection(ctx);
 
         let pipeline = {
             let mut pipeline = pipeline;
@@ -818,7 +850,6 @@ impl<T: Entity, U: Object> AggregateQuery<T, U> {
             pipeline
         };
 
-        let collection = T::collection(ctx);
         let result: Document = if let Some(transaction) = &ctx.transaction {
             let mut transaction = transaction.lock().await;
             let session = &mut transaction.session;
