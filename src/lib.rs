@@ -13,8 +13,6 @@ pub use context::*;
 mod id;
 pub use id::*;
 
-pub mod util;
-
 mod object;
 pub use object::*;
 
