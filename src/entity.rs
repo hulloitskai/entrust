@@ -87,12 +87,12 @@ where
         ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         self.validate().context("validation failed")?;
+        let replacement =
+            self.to_document().context("failed to serialize record")?;
         ctx.with_transaction(|ctx, transaction| async move {
             let collection = Self::collection(&ctx);
             let id = self.id();
             let conditions = doc! { "_id": &id };
-            let replacement =
-                self.to_document().context("failed to serialize record")?;
             let options = ReplaceOptions::builder().upsert(true).build();
 
             let mut transaction = transaction.lock().await;
@@ -132,7 +132,41 @@ where
                 )
                 .await?;
             self.after_save(&ctx).await?;
+            Ok(())
+        })
+        .await
+    }
 
+    async fn save_without_callbacks(
+        &self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        self.validate().context("validation failed")?;
+        let replacement =
+            self.to_document().context("failed to serialize record")?;
+        ctx.with_transaction(|ctx, transaction| async move {
+            let collection = Self::collection(&ctx);
+            let id = self.id();
+            let conditions = doc! { "_id": &id };
+            let options = ReplaceOptions::builder().upsert(true).build();
+
+            let mut transaction = transaction.lock().await;
+            let Transaction { session, .. } = &mut *transaction;
+
+            trace!(
+                collection = collection.name(),
+                %id,
+                %conditions,
+                "saving document"
+            );
+            collection
+                .replace_one_with_session(
+                    conditions,
+                    replacement,
+                    options,
+                    session,
+                )
+                .await?;
             Ok(())
         })
         .await
@@ -179,7 +213,32 @@ where
                 .delete_one_with_session(doc! { "_id": id }, None, session)
                 .await?;
             self.after_delete(&ctx).await?;
+            Ok(())
+        })
+        .await
+    }
 
+    async fn delete_without_callbacks(
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        ctx.with_transaction(|ctx, transaction| async move {
+            let collection = Self::collection(&ctx);
+            let id = self.id();
+            let conditions = doc! { "_id": &id };
+
+            let mut transaction = transaction.lock().await;
+            let Transaction { session, .. } = &mut *transaction;
+
+            trace!(
+                collection = collection.name(),
+                %id,
+                %conditions,
+                "deleting document"
+            );
+            collection
+                .delete_one_with_session(doc! { "_id": id }, None, session)
+                .await?;
             Ok(())
         })
         .await

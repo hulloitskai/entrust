@@ -18,6 +18,17 @@ pub trait Updateable: Entity {
         Ok(())
     }
 
+    async fn update_without_callbacks(
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        let view = self.as_updateable_mut();
+        *view.updated_at = Some(now());
+
+        self.save(ctx).await?;
+        Ok(())
+    }
+
     #[allow(unused_variables)]
     async fn before_update(
         &mut self,

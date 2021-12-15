@@ -43,6 +43,17 @@ pub trait Discardable: Entity {
         Ok(())
     }
 
+    async fn discard_without_callbacks(
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        let view = self.as_discardable_mut();
+        *view.discarded_at = Some(now());
+
+        self.save(ctx).await?;
+        Ok(())
+    }
+
     async fn restore(
         &mut self,
         ctx: &EntityContext<Self::Services>,
@@ -56,6 +67,17 @@ pub trait Discardable: Entity {
         Ok(())
     }
 
+    async fn restore_without_callbacks(
+        &mut self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        let view = self.as_discardable_mut();
+        *view.discarded_at = None;
+
+        self.save(ctx).await?;
+        Ok(())
+    }
+
     #[allow(unused_variables)]
     async fn before_discard(
         &mut self,
@@ -65,7 +87,7 @@ pub trait Discardable: Entity {
     }
 
     #[allow(unused_variables)]
-    async fn before_restore(
+    async fn after_discard(
         &mut self,
         ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
@@ -73,7 +95,7 @@ pub trait Discardable: Entity {
     }
 
     #[allow(unused_variables)]
-    async fn after_discard(
+    async fn before_restore(
         &mut self,
         ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
