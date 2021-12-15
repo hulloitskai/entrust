@@ -1,5 +1,9 @@
 use super::*;
 
+/// TODO: Find a better way to traverse paths (i.e. "discardedAt").
+/// Maybe try using [`frunk`][frunk]?
+///
+/// [frunk]: https://github.com/lloydmeta/frunk
 #[async_trait]
 pub trait Discardable: Entity {
     fn as_discardable(&self) -> DiscardableView;
@@ -8,6 +12,22 @@ pub trait Discardable: Entity {
     fn is_discarded(&self) -> bool {
         let view = self.as_discardable();
         view.discarded_at.is_some()
+    }
+
+    fn kept() -> FindQuery<Self> {
+        FindQuery::new_untyped(doc! {
+            "discardedAt": {
+                "$exists": false
+            }
+        })
+    }
+
+    fn discarded() -> FindQuery<Self> {
+        FindQuery::new_untyped(doc! {
+            "discardedAt": {
+                "$exists": true
+            }
+        })
     }
 
     async fn discard(

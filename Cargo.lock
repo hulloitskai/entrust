@@ -196,7 +196,7 @@ dependencies = [
 
 [[package]]
 name = "entrust"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "async-trait",

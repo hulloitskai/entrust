@@ -26,36 +26,37 @@ where
 
     fn id(&self) -> EntityId<Self>;
 
+    fn collection_name() -> String {
+        Self::NAME.to_mixed_case()
+    }
+
     fn collection(ctx: &EntityContext<Self::Services>) -> Collection<Document> {
-        let name = Self::NAME.to_mixed_case();
+        let name = Self::collection_name();
         ctx.database().collection(&name)
     }
 
     fn get(id: EntityId<Self>) -> FindOneQuery<Self> {
-        let filter = doc! { "_id": id };
-        FindOneQuery::from_filter(filter)
+        FindOneQuery::new_untyped(doc! { "_id": id })
     }
 
     fn get_many(
         ids: impl IntoIterator<Item = EntityId<Self>>,
     ) -> FindQuery<Self> {
         let ids = Bson::from_iter(ids);
-        let filter = doc! { "_id": { "$in": ids } };
-        FindQuery::from_filter(filter)
+        FindQuery::new_untyped(doc! {
+            "_id": { "$in": ids }
+        })
     }
 
     fn all() -> FindQuery<Self> {
-        let filter = doc! { "_deletedAt": { "$exists": false } };
-        FindQuery::from_filter(filter)
-    }
-
-    fn with_deleted() -> FindQuery<Self> {
         Self::find(None)
     }
 
+    // fn with_deleted() -> FindQuery<Self> {}
+
     fn only_deleted() -> FindQuery<Self> {
         let filter = doc! { "_deletedAt": { "$exists": true} };
-        FindQuery::from_filter(filter)
+        FindQuery::new_untyped(filter)
     }
 
     fn find(
@@ -195,8 +196,8 @@ impl<T: Entity> FindOneQuery<T> {
         Self(inner)
     }
 
-    fn from_filter(filter: impl Into<Option<Document>>) -> Self {
-        let inner = FindOneQueryInner::from_filter(filter);
+    pub(super) fn new_untyped(filter: impl Into<Option<Document>>) -> Self {
+        let inner = FindOneQueryInner::new_untyped(filter);
         Self(inner)
     }
 
@@ -263,10 +264,10 @@ impl<T: Entity> FindOneQueryInner<T> {
             let conditions: Option<_> = conditions.into();
             conditions.as_ref().map(EntityConditions::to_document)
         };
-        Self::from_filter(filter)
+        Self::new_untyped(filter)
     }
 
-    fn from_filter(filter: impl Into<Option<Document>>) -> Self {
+    pub fn new_untyped(filter: impl Into<Option<Document>>) -> Self {
         Self {
             filter: filter.into(),
             options: default(),
@@ -382,14 +383,14 @@ fn filter_array_has_operator(array: &[Bson], operator: &str) -> bool {
 
 impl<T: Entity> FindQuery<T> {
     pub fn new(conditions: impl Into<Option<T::Conditions>>) -> Self {
-        let filter: Option<Document> = {
+        let filter = {
             let conditions: Option<_> = conditions.into();
             conditions.as_ref().map(EntityConditions::to_document)
         };
-        Self::from_filter(filter)
+        Self::new_untyped(filter)
     }
 
-    fn from_filter(filter: impl Into<Option<Document>>) -> Self {
+    pub(super) fn new_untyped(filter: impl Into<Option<Document>>) -> Self {
         let filter: Option<_> = filter.into();
         let options = {
             let mut options = FindOptions::default();
