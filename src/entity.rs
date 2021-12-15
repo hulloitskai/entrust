@@ -14,9 +14,9 @@ use heck::MixedCase;
 #[async_trait]
 pub trait Entity
 where
-    Self: Object,
+    Self: Send + Sync + 'static,
     Self: Clone,
-    Self: Send + Sync,
+    Self: Object,
 {
     const NAME: &'static str;
 
@@ -50,13 +50,6 @@ where
 
     fn all() -> FindQuery<Self> {
         Self::find(None)
-    }
-
-    // fn with_deleted() -> FindQuery<Self> {}
-
-    fn only_deleted() -> FindQuery<Self> {
-        let filter = doc! { "_deletedAt": { "$exists": true} };
-        FindQuery::new_untyped(filter)
     }
 
     fn find(
@@ -96,24 +89,47 @@ where
         self.validate().context("validation failed")?;
         ctx.with_transaction(|ctx, transaction| async move {
             let collection = Self::collection(&ctx);
-            let options = ReplaceOptions::builder().upsert(true).build();
-
             let id = self.id();
+            let conditions = doc! { "_id": &id };
             let replacement =
                 self.to_document().context("failed to serialize record")?;
-            let query = doc! { "_id": id };
+            let options = ReplaceOptions::builder().upsert(true).build();
 
             let mut transaction = transaction.lock().await;
-            let session = &mut transaction.session;
+            let Transaction {
+                session,
+                commit_finalizers,
+                abort_finalizers,
+            } = &mut *transaction;
+            {
+                let entity = self.clone();
+                let ctx = ctx.clone();
+                let finalizer =
+                    async move { entity.after_save_commit(&ctx).await };
+                commit_finalizers.push(finalizer.boxed());
+            }
+            {
+                let entity = self.clone();
+                let ctx = ctx.clone();
+                let finalizer =
+                    async move { entity.after_save_abort(&ctx).await };
+                abort_finalizers.push(finalizer.boxed());
+            }
 
             self.before_save(&ctx).await?;
             trace!(
                 collection = collection.name(),
-                %query,
+                %id,
+                %conditions,
                 "saving document"
             );
             collection
-                .replace_one_with_session(query, replacement, options, session)
+                .replace_one_with_session(
+                    conditions,
+                    replacement,
+                    options,
+                    session,
+                )
                 .await?;
             self.after_save(&ctx).await?;
 
@@ -128,20 +144,39 @@ where
     ) -> Result<()> {
         ctx.with_transaction(|ctx, transaction| async move {
             let collection = Self::collection(&ctx);
-
             let id = self.id();
-            let query = doc! { "_id": id };
+            let conditions = doc! { "_id": &id };
+
             let mut transaction = transaction.lock().await;
-            let session = &mut transaction.session;
+            let Transaction {
+                session,
+                commit_finalizers,
+                abort_finalizers,
+            } = &mut *transaction;
+            {
+                let entity = self.clone();
+                let ctx = ctx.clone();
+                let finalizer =
+                    async move { entity.after_delete_commit(&ctx).await };
+                commit_finalizers.push(finalizer.boxed());
+            }
+            {
+                let entity = self.clone();
+                let ctx = ctx.clone();
+                let finalizer =
+                    async move { entity.after_delete_abort(&ctx).await };
+                abort_finalizers.push(finalizer.boxed());
+            }
 
             self.before_delete(&ctx).await?;
             trace!(
                 collection = collection.name(),
-                %query,
+                %id,
+                %conditions,
                 "deleting document"
             );
             collection
-                .delete_one_with_session(query, None, session)
+                .delete_one_with_session(doc! { "_id": id }, None, session)
                 .await?;
             self.after_delete(&ctx).await?;
 
@@ -163,7 +198,7 @@ where
     }
 
     #[allow(unused_variables)]
-    async fn before_delete(
+    async fn after_save(
         &mut self,
         ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
@@ -171,7 +206,23 @@ where
     }
 
     #[allow(unused_variables)]
-    async fn after_save(
+    async fn after_save_commit(
+        self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn after_save_abort(
+        self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn before_delete(
         &mut self,
         ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
@@ -181,6 +232,22 @@ where
     #[allow(unused_variables)]
     async fn after_delete(
         &mut self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn after_delete_commit(
+        self,
+        ctx: &EntityContext<Self::Services>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn after_delete_abort(
+        self,
         ctx: &EntityContext<Self::Services>,
     ) -> Result<()> {
         Ok(())
@@ -196,8 +263,8 @@ impl<T: Entity> FindOneQuery<T> {
         Self(inner)
     }
 
-    pub(super) fn new_untyped(filter: impl Into<Option<Document>>) -> Self {
-        let inner = FindOneQueryInner::new_untyped(filter);
+    pub(super) fn new_untyped(conditions: impl Into<Option<Document>>) -> Self {
+        let inner = FindOneQueryInner::new_untyped(conditions);
         Self(inner)
     }
 
@@ -253,23 +320,22 @@ impl<T: Entity> MaybeFindOneQuery<T> {
 
 #[derive(Debug, Clone)]
 struct FindOneQueryInner<T: Entity> {
-    filter: Option<Document>,
+    conditions: Option<Document>,
     options: FindOneOptions,
     phantom: PhantomData<T>,
 }
 
 impl<T: Entity> FindOneQueryInner<T> {
     pub fn new(conditions: impl Into<Option<T::Conditions>>) -> Self {
-        let filter: Option<Document> = {
+        Self::new_untyped({
             let conditions: Option<_> = conditions.into();
             conditions.as_ref().map(EntityConditions::to_document)
-        };
-        Self::new_untyped(filter)
+        })
     }
 
-    pub fn new_untyped(filter: impl Into<Option<Document>>) -> Self {
+    pub fn new_untyped(conditions: impl Into<Option<Document>>) -> Self {
         Self {
-            filter: filter.into(),
+            conditions: conditions.into(),
             options: default(),
             phantom: default(),
         }
@@ -280,37 +346,39 @@ impl<T: Entity> FindOneQueryInner<T> {
         ctx: &EntityContext<T::Services>,
     ) -> Result<Option<T>> {
         let Self {
-            filter, options, ..
+            conditions,
+            options,
+            ..
         } = self;
         let collection = T::collection(ctx);
 
         let doc = if let Some(transaction) = &ctx.transaction {
             let mut transaction = transaction.lock().await;
             let session = &mut transaction.session;
-            if let Some(filter) = &filter {
+            if let Some(conditions) = &conditions {
                 trace!(
                     collection = collection.name(),
-                    session = %session.id(),
-                    %filter,
+                    %conditions,
                     options = %format_find_one_options(&options),
+                    session = %session.id(),
                     "finding document"
                 );
             } else {
                 trace!(
                     collection = collection.name(),
-                    session = %session.id(),
                     options = %format_find_one_options(&options),
+                    session = %session.id(),
                     "finding a document"
                 );
             }
             collection
-                .find_one_with_session(filter, options, session)
+                .find_one_with_session(conditions, options, session)
                 .await?
         } else {
-            if let Some(filter) = &filter {
+            if let Some(conditions) = &conditions {
                 trace!(
                     collection = collection.name(),
-                    %filter,
+                    %conditions,
                     options = %format_find_one_options(&options),
                     "finding document"
                 );
@@ -321,7 +389,7 @@ impl<T: Entity> FindOneQueryInner<T> {
                     "finding a document"
                 );
             }
-            collection.find_one(filter, options).await?
+            collection.find_one(conditions, options).await?
         };
 
         let doc = match doc {
@@ -336,26 +404,26 @@ impl<T: Entity> FindOneQueryInner<T> {
         self,
         ctx: &EntityContext<T::Services>,
     ) -> Result<bool> {
-        let Self { filter, .. } = self;
+        let Self { conditions, .. } = self;
         let collection = T::collection(ctx);
-        let count = collection.count_documents(filter, None).await?;
+        let count = collection.count_documents(conditions, None).await?;
         Ok(count > 0)
     }
 }
 
 pub struct FindQuery<T: Entity> {
-    filter: Option<Document>,
+    conditions: Option<Document>,
     options: FindOptions,
     phantom: PhantomData<T>,
 }
 
-fn filter_has_operator(filter: &Document, operator: &str) -> bool {
-    for (key, value) in filter {
+fn document_has_operator(doc: &Document, operator: &str) -> bool {
+    for (key, value) in doc {
         if key.starts_with('$') {
             if key == operator {
                 return true;
             }
-            if dbg!(filter_value_has_operator(value, operator)) {
+            if dbg!(document_value_has_operator(value, operator)) {
                 return true;
             }
         }
@@ -363,18 +431,18 @@ fn filter_has_operator(filter: &Document, operator: &str) -> bool {
     false
 }
 
-fn filter_value_has_operator(value: &Bson, operator: &str) -> bool {
+fn document_value_has_operator(value: &Bson, operator: &str) -> bool {
     use Bson::*;
     match value {
-        Document(filter) => dbg!(filter_has_operator(filter, operator)),
-        Array(array) => dbg!(filter_array_has_operator(array, operator)),
+        Document(doc) => dbg!(document_has_operator(doc, operator)),
+        Array(array) => dbg!(document_array_has_operator(array, operator)),
         _ => false,
     }
 }
 
-fn filter_array_has_operator(array: &[Bson], operator: &str) -> bool {
+fn document_array_has_operator(array: &[Bson], operator: &str) -> bool {
     for entry in array {
-        if filter_value_has_operator(entry, operator) {
+        if document_value_has_operator(entry, operator) {
             return true;
         }
     }
@@ -383,19 +451,18 @@ fn filter_array_has_operator(array: &[Bson], operator: &str) -> bool {
 
 impl<T: Entity> FindQuery<T> {
     pub fn new(conditions: impl Into<Option<T::Conditions>>) -> Self {
-        let filter = {
+        Self::new_untyped({
             let conditions: Option<_> = conditions.into();
             conditions.as_ref().map(EntityConditions::to_document)
-        };
-        Self::new_untyped(filter)
+        })
     }
 
-    pub(super) fn new_untyped(filter: impl Into<Option<Document>>) -> Self {
-        let filter: Option<_> = filter.into();
+    pub(super) fn new_untyped(conditions: impl Into<Option<Document>>) -> Self {
+        let conditions: Option<_> = conditions.into();
         let options = {
             let mut options = FindOptions::default();
-            if let Some(filter) = &filter {
-                if filter_has_operator(filter, "$text") {
+            if let Some(conditions) = &conditions {
+                if document_has_operator(conditions, "$text") {
                     let sort = doc! { "score": { "$meta": "textScore" } };
                     options.sort = Some(sort);
                 }
@@ -403,7 +470,7 @@ impl<T: Entity> FindQuery<T> {
             options
         };
         Self {
-            filter,
+            conditions,
             options,
             phantom: default(),
         }
@@ -415,7 +482,7 @@ impl<T: Entity> FindQuery<T> {
             conditions.as_ref().map(EntityConditions::to_document)
         };
         if let Some(incoming) = incoming {
-            let filter = match self.filter {
+            let conditions = match self.conditions {
                 Some(existing) => {
                     doc! {
                         "$and": [existing, incoming],
@@ -423,7 +490,7 @@ impl<T: Entity> FindQuery<T> {
                 }
                 None => incoming,
             };
-            self.filter = Some(filter);
+            self.conditions = Some(conditions);
         }
         self
     }
@@ -472,7 +539,9 @@ impl<T: Entity> FindQuery<T> {
         ctx: &EntityContext<T::Services>,
     ) -> Result<impl Stream<Item = Result<T>>> {
         let Self {
-            filter, options, ..
+            conditions,
+            options,
+            ..
         } = self;
         let collection = T::collection(ctx);
 
@@ -482,33 +551,33 @@ impl<T: Entity> FindQuery<T> {
             let cursor = {
                 let mut transaction = transaction.lock().await;
                 let session = &mut transaction.session;
-                if let Some(filter) = &filter {
+                if let Some(conditions) = &conditions {
                     trace!(
                         collection = collection.name(),
-                        session = %session.id(),
-                        %filter,
+                        %conditions,
                         options = %format_find_options(&options),
+                        session = %session.id(),
                         "finding documents"
                     );
                 } else {
                     trace!(
                         collection = collection.name(),
-                        session = %session.id(),
                         options = %format_find_options(&options),
+                        session = %session.id(),
                         "finding all documents"
                     );
                 }
                 collection
-                    .find_with_session(filter, options, session)
+                    .find_with_session(conditions, options, session)
                     .await?
             };
             let cursor = TransactionCursor::new(cursor, transaction.to_owned());
             Box::new(cursor)
         } else {
-            if let Some(filter) = &filter {
+            if let Some(conditions) = &conditions {
                 trace!(
                     collection = collection.name(),
-                    %filter,
+                    %conditions,
                     options = %format_find_options(&options),
                     "finding documents"
                 );
@@ -519,7 +588,7 @@ impl<T: Entity> FindQuery<T> {
                     "finding all documents"
                 );
             }
-            let cursor = collection.find(filter, options).await?;
+            let cursor = collection.find(conditions, options).await?;
             Box::new(cursor)
         };
 
@@ -535,7 +604,7 @@ impl<T: Entity> FindQuery<T> {
 
     pub async fn count(self, ctx: &EntityContext<T::Services>) -> Result<u64> {
         let Self {
-            filter,
+            conditions,
             options: find_options,
             ..
         } = self;
@@ -558,11 +627,11 @@ impl<T: Entity> FindQuery<T> {
         let count = if let Some(transaction) = &ctx.transaction {
             let mut transaction = transaction.lock().await;
             let session = &mut transaction.session;
-            if let Some(filter) = &filter {
+            if let Some(conditions) = &conditions {
                 trace!(
                     collection = collection.name(),
                     session = %session.id(),
-                    %filter,
+                    %conditions,
                     options = %format_find_options(&find_options),
                     "counting documents"
                 );
@@ -575,13 +644,13 @@ impl<T: Entity> FindQuery<T> {
                 );
             }
             collection
-                .count_documents_with_session(filter, options, session)
+                .count_documents_with_session(conditions, options, session)
                 .await?
         } else {
-            if let Some(filter) = &filter {
+            if let Some(conditions) = &conditions {
                 trace!(
                     collection = collection.name(),
-                    %filter,
+                    %conditions,
                     options = %format_find_options(&find_options),
                     "counting documents"
                 );
@@ -592,7 +661,7 @@ impl<T: Entity> FindQuery<T> {
                     "counting documents"
                 );
             }
-            collection.count_documents(filter, None).await?
+            collection.count_documents(conditions, None).await?
         };
 
         Ok(count)

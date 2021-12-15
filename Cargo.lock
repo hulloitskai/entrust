@@ -196,13 +196,14 @@ dependencies = [
 
 [[package]]
 name = "entrust"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64",
  "bson",
  "chrono",
+ "derivative",
  "futures-core",
  "futures-util",
  "heck",

@@ -57,18 +57,15 @@ impl<S: EntityServices> EntityContext<S> {
             .context("failed to begin transaction")?;
 
         if is_root {
-            match f(ctx, transaction.clone()).await {
-                Ok(value) => {
-                    let mut transaction = transaction.lock().await;
-                    transaction.commit().await?;
-                    Ok(value)
-                }
-                Err(error) => {
-                    let mut transaction = transaction.lock().await;
-                    transaction.abort().await?;
-                    Err(error)
-                }
+            let result = f(ctx, transaction.clone()).await;
+            if result.is_ok() {
+                let mut transaction = transaction.lock().await;
+                transaction.commit().await?;
+            } else {
+                let mut transaction = transaction.lock().await;
+                transaction.abort().await?;
             }
+            result
         } else {
             f(ctx, transaction).await
         }

@@ -1,0 +1,14 @@
+version: "3"
+
+services:
+  mongo:
+    image: mongo:4.4
+    command: --dbpath /data/db --replSet rs0
+    volumes:
+      - mongo:/data/db
+      - ./.config/mongo/init:/docker-entrypoint-initdb.d
+    ports:
+      - 27017:27017
+
+volumes:
+  mongo: null

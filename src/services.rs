@@ -2,7 +2,7 @@ use super::*;
 
 pub trait EntityServices
 where
-    Self: Send + Sync,
+    Self: Send + Sync + 'static,
     Self: Clone,
 {
     fn database(&self) -> &Database;
